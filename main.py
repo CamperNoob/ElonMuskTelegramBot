@@ -8,6 +8,7 @@ import telegram
 from os import path, mkdir
 from typing import Union
 # tokens
+# TODO: change to json tokens
 from tokens import TelegramTOKEN, TwitterTOKEN
 
 # constants
@@ -28,7 +29,6 @@ def recursive_handler(func: callable(object)) -> callable(object):
         except Exception as e:
             # do something with the exception, e.g. sleep(300) when exception is TooManyRequests
             logger.exception(f"Exception caught: {e}")
-            # wait 5 mins
             sleep(300)
             # return the value of successful execution to the higher recursion instance (without return - passes None)
             return inner(*args, **kwargs)
@@ -53,6 +53,7 @@ class ParsedTweetToTelegram:
 
 
 # file jobs
+# TODO: change to json subscribers
 def subscribers_file_read(file) -> list:
     subscriber_list = []
     if not path.exists(file):
@@ -66,6 +67,7 @@ def subscribers_file_read(file) -> list:
     return subscriber_list
 
 
+# TODO: change to json latest and add fallback
 def latest_tweet_id_file_read(file) -> int:
     _latest_tweet_id = []
     if not path.exists(file):
@@ -128,21 +130,25 @@ def update_subscribers():
 
 # Background threaded messenger
 def newsletter() -> None:
-    # Bot close will throw RetryAfter error if from start was < 10 minutes
     __latest_tweet_id__ = latest_tweet_id_file_read(latest_tweet_file)
     bot = telegram.ext.ExtBot(TelegramTOKEN)
+    # Bot close will throw RetryAfter error if from start was < 10 minutes, will throw BadRequest after few days running
+    # so we always try to close and reopen it
     closed = False
     while True:
         sleep(60)
         logger.debug("Started newsletter job")
         tweet = twitter_fetch(twitter)
         if tweet:
+            # restart bot if closed
             if closed:
                 bot = telegram.ext.ExtBot(TelegramTOKEN)
+            # fetched tweet wasn't sent earlier - update tweetid in file and send it
             if not __latest_tweet_id__ == tweet.tweet_id:
                 __latest_tweet_id__ = tweet.tweet_id
                 write_latest_tweet(latest_tweet_file, tweet)
                 logger.info("Updated last tweet id in file")
+            # inline button
             inline_url = telegram.InlineKeyboardMarkup([[
                 telegram.InlineKeyboardButton(text='Link to source',
                                               url=tweet.tweet_url)
@@ -151,33 +157,28 @@ def newsletter() -> None:
                 for user in subscriptions:
                     try:
                         if tweet.is_media:
-                            try:
-                                bot.sendPhoto(
-                                    chat_id=user, photo=tweet.media, caption=tweet.string(),
-                                    reply_markup=inline_url, parse_mode=telegram.ParseMode.HTML
-                                )
-                            except telegram.error.RetryAfter as t:
-                                logger.debug(f"RetryAfter error when sending photo: {t}")
-                                sleep(t.retry_after)
-                            except telegram.error.BadRequest as b:
-                                logger.error(f"Bad request when sending photo: {b}")
-                                continue
+                            bot.sendPhoto(
+                                chat_id=user, photo=tweet.media, caption=tweet.string(),
+                                reply_markup=inline_url, parse_mode=telegram.ParseMode.HTML
+                            )
                         else:
-                            try:
-                                bot.sendMessage(
-                                    chat_id=user, text=tweet.string(), reply_markup=inline_url,
-                                    parse_mode=telegram.ParseMode.HTML
-                                )
-                            except telegram.error.RetryAfter as t:
-                                logger.debug(f"RetryAfter error when sending message: {t}")
-                                sleep(t.retry_after)
-                            except telegram.error.BadRequest as b:
-                                logger.error(f"Bad request when sending photo: {b}")
-                                continue
+                            bot.sendMessage(
+                                chat_id=user, text=tweet.string(), reply_markup=inline_url,
+                                parse_mode=telegram.ParseMode.HTML
+                            )
+                    # will skip sending to current user if RetryAfter, but will wait before sending to next one
+                    except telegram.error.RetryAfter as t:
+                        logger.debug(f"RetryAfter error when sending photo: {t}")
+                        sleep(t.retry_after)
+                    # can't do anything here except skip this user
+                    except telegram.error.BadRequest as b:
+                        logger.error(f"Bad request when sending photo: {b}")
+                        continue
                     except telegram.error.Unauthorized:
                         subscriptions.remove(user)
-                        logger.error(f"{user} blocked the bot without unsubscribing first. Removed from list.")
+                        logger.warning(f"{user} blocked the bot without unsubscribing first. Removed from list.")
             logger.info(f'Send newsletter to {len(subscriptions)} users')
+        # try to close bot
         elif not closed:
             try:
                 bot.close()
@@ -192,7 +193,7 @@ def newsletter() -> None:
 def twitter_fetch(_twitter: tweepy.api) -> Union[ParsedTweetToTelegram, None]:
     logger.debug("Running twitter_fetch")
     _tweets = _twitter.user_timeline(id=elonID,
-                                     # only one tweet
+                                     # maximum tweets (works badly if only next tweet in case retweets were created)
                                      count=200,
                                      # exclude retweets
                                      include_rts=False,
@@ -232,6 +233,8 @@ def get_latest(_twitter: tweepy.api) -> Union[ParsedTweetToTelegram, None]:
 
 
 # Telegram commands
+
+# Get username or full name from message obj
 def username(update: telegram.Update) -> str:
     user = update.message.from_user
     if user.username:
@@ -242,6 +245,7 @@ def username(update: telegram.Update) -> str:
         return str('User')
 
 
+# /start is used when writing to the bot first time
 def start(update: telegram.Update, context: telegram.ext.CallbackContext) -> None:
     userid = update.message.from_user.id
     if userid not in subscriptions:
@@ -277,6 +281,8 @@ def unsubscribe(update: telegram.Update, context: telegram.ext.CallbackContext) 
         update.message.reply_html('You are already unsubscribed!')
 
 
+# /latest to send last tweet. Will send an error when tweet is no longer available
+# TODO: add fallback - previous-previous tweet
 def latest(update: telegram.Update, context: telegram.ext.CallbackContext) -> None:
     # get the tweet by ID and use parser class
     latest_tweet = get_latest(twitter)
