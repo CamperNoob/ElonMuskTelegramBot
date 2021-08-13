@@ -131,3 +131,12 @@ dmypy.json
 
 # Access tokens
 tokens.py
+
+# Data
+data/
+
+# Logs
+logs/
+
+# PyCharm stuff
+.idea/
