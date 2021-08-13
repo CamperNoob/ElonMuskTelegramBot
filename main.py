@@ -13,7 +13,7 @@ from copy import deepcopy
 from tokens import TelegramTOKEN, TwitterTOKEN
 
 # constants
-elonID = '44196397'
+elonID = '44196397'  # https://tweeterid.com/
 latest_tweet_file = "data\\latesttweetid.dat"
 subscribers_file = "data\\subscriptions.dat"
 twitter_auth = tweepy.OAuthHandler(TwitterTOKEN['ckey'], TwitterTOKEN['csecret'])
