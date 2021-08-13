@@ -1,5 +1,5 @@
 # ElonMuskTelegramBot
-##№ Simple telegram/twitter bot.  
+### Simple telegram/twitter bot.  
 Fetches tweets by user id (Elon Musk) and sends them to subscribers in telegram.  
 By default:
 - logs are in *logs/*
