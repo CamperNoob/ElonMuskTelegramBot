@@ -7,6 +7,7 @@ import telegram.ext
 import telegram
 from os import path, mkdir
 from typing import Union
+from copy import deepcopy
 # tokens
 # TODO: change to json tokens
 from tokens import TelegramTOKEN, TwitterTOKEN
@@ -121,7 +122,7 @@ def update_subscribers():
         if not __subscriptions__ == subscriptions:
             logger.info("Updating subscriptions file, difference: "
                         f"{list(set(__subscriptions__).symmetric_difference(set(subscriptions)))}")
-            __subscriptions__ = subscriptions
+            __subscriptions__ = deepcopy(subscriptions)
             open(subscribers_file, 'w').close()
             with open(subscribers_file, 'a') as file:
                 file.write('\n'.join(str(user) for user in __subscriptions__))
